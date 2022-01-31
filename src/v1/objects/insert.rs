@@ -55,6 +55,7 @@ pub struct InsertObjectOptional<'a> {
 /// for the newly inserted Object
 pub struct InsertResponse {
     pub metadata: super::Metadata,
+    pub session_uri: Option<String>, // TODO: better placement / approach
 }
 
 impl ApiResponse<&[u8]> for InsertResponse {}
@@ -67,9 +68,22 @@ where
     type Error = Error;
 
     fn try_from(response: http::Response<B>) -> Result<Self, Self::Error> {
-        let (_parts, body) = response.into_parts();
+        let (parts, body) = response.into_parts();
         let metadata: super::Metadata = serde_json::from_slice(body.as_ref())?;
-        Ok(Self { metadata })
+        let session_uri = match parts.headers.get( http::header::LOCATION) {
+            Some(session_uri) => {
+                let session_uri = session_uri.to_str();
+                Some(match session_uri {
+                    Ok(session_uri) => session_uri.to_owned(),
+                    Err(err) => {
+                        println!("non ascii chars in location header {:?}", err);
+                        "".to_owned()
+                    }
+                })
+            },
+            None => None,
+        };
+        Ok(Self { metadata, session_uri })
     }
 }
 
@@ -430,12 +444,12 @@ impl super::Object {
         Ok(req_builder.method("POST").uri(uri).body(multipart)?)
     }
 
-    // refactor to reuse common code
+    // TODO: refactor to reuse common code
     pub fn initiate_resumable_insert<'a, B>(
         bucket: &BucketName<'_>,
         content: B,
         length: u64,
-        metadata: &super::Metadata, // make optional and fallback to simple upload
+        metadata: &super::Metadata, // TODO: make optional and fallback to simple upload
         optional: Option<InsertObjectOptional<'_>>,
     ) -> Result<http::Request<Multipart<B>>, Error>
     {
