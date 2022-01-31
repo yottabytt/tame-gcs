@@ -54,7 +54,7 @@ pub struct InsertObjectOptional<'a> {
 /// The response from an insert request is the Object [metadata](https://cloud.google.com/storage/docs/json_api/v1/objects#resource)
 /// for the newly inserted Object
 pub struct InsertResponse {
-    pub metadata: super::Metadata,
+    pub metadata: Option<super::Metadata>, // TODO: better placement / approach
     pub session_uri: Option<String>, // TODO: better placement / approach
 }
 
@@ -69,7 +69,11 @@ where
 
     fn try_from(response: http::Response<B>) -> Result<Self, Self::Error> {
         let (parts, body) = response.into_parts();
-        let metadata: super::Metadata = serde_json::from_slice(body.as_ref())?;
+        let metadata = if body.as_ref().len() == 0 {
+            None
+        } else {
+            Some(serde_json::from_slice(body.as_ref())?)
+        };
         let session_uri = match parts.headers.get( http::header::LOCATION) {
             Some(session_uri) => {
                 let session_uri = session_uri.to_str();
@@ -460,7 +464,7 @@ impl super::Object {
         let req_builder = http::Request::builder()
             .header(http::header::CONTENT_LENGTH, 0u64);
 
-        print!("uri is {:?}", uri);
+        println!("uri is {:?}", uri);
         Ok(req_builder.method("POST").uri(uri).body(())?)
     }
 
