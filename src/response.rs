@@ -1,3 +1,5 @@
+use http::StatusCode;
+
 use crate::error::{self, Error};
 use std::convert::TryFrom;
 
@@ -6,7 +8,8 @@ where
     B: AsRef<[u8]>,
 {
     fn try_from_parts(resp: http::response::Response<B>) -> Result<Self, Error> {
-        if resp.status().is_success() {
+        let status = resp.status();
+        if status.is_success() || status == StatusCode::from_u16(308).unwrap() {
             Self::try_from(resp)
         } else {
             // If we get an error, but with a JSON payload, attempt to deserialize
