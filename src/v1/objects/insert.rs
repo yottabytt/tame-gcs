@@ -478,7 +478,7 @@ impl super::Object {
             uri.push('&');
             uri.push_str(&query_params);
         }
-
+        print!("uri is {:?}", uri);
         Ok(req_builder.method("POST").uri(uri).body(content)?)
     }
 
