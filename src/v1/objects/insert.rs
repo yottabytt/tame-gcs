@@ -445,7 +445,7 @@ impl super::Object {
     }
 
     // TODO: refactor to reuse common code
-    pub fn initiate_resumable_insert<'a, OID, B>(
+    pub fn initiate_resumable_insert<'a, OID>(
         id: &OID,
     ) -> Result<http::Request<()>, Error>
     where
