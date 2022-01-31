@@ -445,42 +445,33 @@ impl super::Object {
     }
 
     // TODO: refactor to reuse common code
-    pub fn initiate_resumable_insert<'a, B>(
-        bucket: &BucketName<'_>,
+    pub fn initiate_resumable_insert<'a, OID, B>(
+        id: &OID,
         content: B,
         length: u64,
-        metadata: &super::Metadata, // TODO: make optional and fallback to simple upload
         optional: Option<InsertObjectOptional<'_>>,
-    ) -> Result<http::Request<Multipart<B>>, Error>
+    ) -> Result<http::Request<B>, Error>
+    where
+        OID: ObjectIdentifier<'a> + ?Sized,
     {
-        match metadata.name {
-            Some(ref name) => ObjectName::try_from(name.as_ref())?,
-            None => {
-                return Err(Error::InvalidLength {
-                    len: 0,
-                    min: 1,
-                    max: 1024,
-                })
-            }
-        };
-
-        let name = metadata.name.clone().unwrap();
         let mut uri = format!(
             "https://www.googleapis.com/upload/storage/v1/b/{}/o?uploadType=resumable&name={}",
-            percent_encoding::percent_encode(bucket.as_ref(), crate::util::PATH_ENCODE_SET,),
-            percent_encoding::percent_encode(name.as_ref(), crate::util::QUERY_ENCODE_SET,),
+            percent_encoding::percent_encode(id.bucket().as_ref(), crate::util::PATH_ENCODE_SET,),
+            percent_encoding::percent_encode(id.object().as_ref(), crate::util::QUERY_ENCODE_SET,),
         );
 
         let query = optional.unwrap_or_default();
 
-        let multipart = Multipart::wrap(content, length, metadata)?;
-
+        
         let req_builder = http::Request::builder()
             .header(
                 http::header::CONTENT_TYPE,
-                http::header::HeaderValue::from_static("multipart/related; boundary=tame_gcs"),
+                http::header::HeaderValue::from_str(
+                    query.content_type.unwrap_or("application/octet-stream"),
+                )
+                .map_err(http::Error::from)?,
             )
-            .header(http::header::CONTENT_LENGTH, multipart.total_len());
+            .header(http::header::CONTENT_LENGTH, length);
 
         let query_params = serde_urlencoded::to_string(query)?;
         if !query_params.is_empty() {
@@ -488,7 +479,7 @@ impl super::Object {
             uri.push_str(&query_params);
         }
 
-        Ok(req_builder.method("POST").uri(uri).body(multipart)?)
+        Ok(req_builder.method("POST").uri(uri).body(content)?)
     }
 
     pub fn resumable_insert<B>(
