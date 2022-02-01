@@ -62,10 +62,14 @@ pub struct InitResumbaleInsertResponse {
     pub session_uri: String,
 }
 
+pub enum ResumableInsertResponseMetadata {
+    Size(u64), // TODO: maybe PartialSize ?
+    Complete(Box<super::Metadata>),
+}
+
 // TODO: rethink abt fields' data types
 pub struct ResumableInsertResponse {
-    pub size: Option<u64>,
-    pub metadata: Option<super::Metadata>,
+    pub metadata: ResumableInsertResponseMetadata,
 }
 
 impl ApiResponse<&[u8]> for InsertResponse {}
@@ -117,7 +121,7 @@ where
     type Error = Error;
 
     fn try_from(response: http::Response<B>) -> Result<Self, Self::Error> {
-        let (size, metadata) = if response.status() == StatusCode::from_u16(308).unwrap() {
+        if response.status() == StatusCode::from_u16(308).unwrap() {
             let (parts, _body) = response.into_parts();
             let size = match parts.headers.get(http::header::RANGE) {
                 Some(range) => match range.to_str() {
@@ -136,13 +140,17 @@ where
                     Err(_err) => Err(Error::OpaqueHeaderValue(range.clone())),
                 },
                 None => Err(Error::UnknownHeader(http::header::RANGE)),
-            };
-            (Some(size?), None)
+            }?;
+            Ok(Self {
+                metadata: ResumableInsertResponseMetadata::Size(size),
+            })
         } else {
             let (_parts, body) = response.into_parts();
-            (None, Some(serde_json::from_slice(body.as_ref())?))
-        };
-        Ok(Self { size, metadata })
+            let metadata = Box::new(serde_json::from_slice(body.as_ref())?);
+            Ok(Self {
+                metadata: ResumableInsertResponseMetadata::Complete(metadata),
+            })
+        }
     }
 }
 
