@@ -64,7 +64,7 @@ pub struct InitResumbaleInsertResponse {
 
 // TODO: rethink abt fields' data types
 pub struct ResumableInsertResponse {
-    pub next_pos: Option<u64>,
+    pub size: Option<u64>,
     pub metadata: Option<super::Metadata>,
 }
 
@@ -117,16 +117,16 @@ where
     type Error = Error;
 
     fn try_from(response: http::Response<B>) -> Result<Self, Self::Error> {
-        let (next_pos, metadata) = if response.status() == StatusCode::from_u16(308).unwrap() {
+        let (size, metadata) = if response.status() == StatusCode::from_u16(308).unwrap() {
             let (parts, _body) = response.into_parts();
-            let next_pos = match parts.headers.get(http::header::RANGE) {
+            let size = match parts.headers.get(http::header::RANGE) {
                 Some(range) => match range.to_str() {
                     Ok(range) => {
                         match range.split('-').last() {
-                            Some(next_pos) => {
-                                let next_pos = next_pos.parse::<u64>();
-                                match next_pos {
-                                    Ok(next_pos) => Ok(next_pos),
+                            Some(size) => {
+                                let size = size.parse::<u64>();
+                                match size {
+                                    Ok(size) => Ok(size),
                                     Err(_err) => Err(Error::UnknownHeader(http::header::RANGE)), // TODO: better this
                                 }
                             }
@@ -137,12 +137,12 @@ where
                 },
                 None => Err(Error::UnknownHeader(http::header::RANGE)),
             };
-            (Some(next_pos?), None)
+            (Some(size?), None)
         } else {
             let (_parts, body) = response.into_parts();
             (None, Some(serde_json::from_slice(body.as_ref())?))
         };
-        Ok(Self { next_pos, metadata })
+        Ok(Self { size, metadata })
     }
 }
 
