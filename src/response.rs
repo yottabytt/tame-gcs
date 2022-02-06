@@ -1,7 +1,8 @@
 use http::StatusCode;
 
-use crate::error::{self, Error};
+use crate::error::{self, ApiError, Error};
 use std::convert::TryFrom;
+use std::str;
 
 pub trait ApiResponse<B>: Sized + TryFrom<http::Response<B>, Error = Error>
 where
@@ -14,6 +15,7 @@ where
         } else {
             // If we get an error, but with a JSON payload, attempt to deserialize
             // an ApiError from it, otherwise fallback to the simple HttpStatus
+            // TODO: update ^ desc
             if let Some(ct) = resp
                 .headers()
                 .get(http::header::CONTENT_TYPE)
@@ -25,9 +27,17 @@ where
                     {
                         return Err(Error::Api(api_err));
                     }
+                } else if ct.starts_with("text/plain") && !resp.body().as_ref().is_empty() {
+                    if let Ok(message) = str::from_utf8(resp.body().as_ref()) {
+                        let api_err = ApiError {
+                            code: status.into(),
+                            message: message.to_owned(),
+                            errors: vec![],
+                        };
+                        return Err(Error::Api(api_err));
+                    }
                 }
             }
-
             Err(Error::from(resp.status()))
         }
     }
