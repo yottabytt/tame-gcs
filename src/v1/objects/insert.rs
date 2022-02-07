@@ -123,7 +123,7 @@ where
     fn try_from(response: http::Response<B>) -> Result<Self, Self::Error> {
         if response.status() == StatusCode::from_u16(308).unwrap() {
             let (parts, _body) = response.into_parts();
-            let last_byte_pos = match parts.headers.get(http::header::RANGE) {
+            let end_pos = match parts.headers.get(http::header::RANGE) {
                 Some(range) => match range.to_str() {
                     Ok(range) => {
                         match range.split('-').last() {
@@ -142,7 +142,7 @@ where
                 None => Err(Error::UnknownHeader(http::header::RANGE)),
             }?;
             Ok(Self {
-                metadata: ResumableInsertResponseMetadata::PartialSize(last_byte_pos + 1),
+                metadata: ResumableInsertResponseMetadata::PartialSize(end_pos + 1),
             })
         } else {
             let (_parts, body) = response.into_parts();
@@ -511,7 +511,10 @@ impl super::Object {
         Ok(req_builder.method("POST").uri(uri).body(multipart)?)
     }
 
-    pub fn initiate_resumable_insert<'a, OID>(id: &OID) -> Result<http::Request<()>, Error>
+    pub fn initiate_resumable_insert<'a, OID>(
+        id: &OID,
+        content_type: Option<&str>,
+    ) -> Result<http::Request<()>, Error>
     where
         OID: ObjectIdentifier<'a> + ?Sized,
     {
@@ -525,8 +528,11 @@ impl super::Object {
             .header(http::header::CONTENT_LENGTH, 0u64)
             .header(
                 http::header::HeaderName::from_static("x-upload-content-type"),
-                http::header::HeaderValue::from_static("application/octet-stream"),
-            ); // TODO: think about making it a param
+                http::header::HeaderValue::from_str(
+                    content_type.unwrap_or("application/octet-stream"),
+                )
+                .map_err(http::Error::from)?,
+            );
 
         Ok(req_builder.method("POST").uri(uri).body(())?)
     }
