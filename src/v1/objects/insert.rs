@@ -123,14 +123,14 @@ where
     fn try_from(response: http::Response<B>) -> Result<Self, Self::Error> {
         if response.status() == StatusCode::from_u16(308).unwrap() {
             let (parts, _body) = response.into_parts();
-            let size = match parts.headers.get(http::header::RANGE) {
+            let last_byte_pos = match parts.headers.get(http::header::RANGE) {
                 Some(range) => match range.to_str() {
                     Ok(range) => {
                         match range.split('-').last() {
-                            Some(size) => {
-                                let size = size.parse::<u64>();
-                                match size {
-                                    Ok(size) => Ok(size),
+                            Some(pos) => {
+                                let pos = pos.parse::<u64>();
+                                match pos {
+                                    Ok(pos) => Ok(pos),
                                     Err(_err) => Err(Error::UnknownHeader(http::header::RANGE)), // TODO: better this
                                 }
                             }
@@ -142,7 +142,7 @@ where
                 None => Err(Error::UnknownHeader(http::header::RANGE)),
             }?;
             Ok(Self {
-                metadata: ResumableInsertResponseMetadata::PartialSize(size),
+                metadata: ResumableInsertResponseMetadata::PartialSize(last_byte_pos + 1),
             })
         } else {
             let (_parts, body) = response.into_parts();
