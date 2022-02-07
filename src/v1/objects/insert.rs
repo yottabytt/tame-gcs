@@ -524,7 +524,7 @@ impl super::Object {
         let req_builder = http::Request::builder()
             .header(http::header::CONTENT_LENGTH, 0u64)
             .header(
-                http::header::HeaderName::from_static("X-Upload-Content-Type"),
+                http::header::HeaderName::from_static("x-upload-content-type"),
                 http::header::HeaderValue::from_static("application/octet-stream"),
             ); // TODO: think about making it a param
 
