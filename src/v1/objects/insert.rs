@@ -63,7 +63,7 @@ pub struct InitResumbaleInsertResponse {
 }
 
 pub enum ResumableInsertResponseMetadata {
-    Size(u64), // TODO: maybe PartialSize ?
+    PartialSize(u64),
     Complete(Box<super::Metadata>),
 }
 
@@ -142,7 +142,7 @@ where
                 None => Err(Error::UnknownHeader(http::header::RANGE)),
             }?;
             Ok(Self {
-                metadata: ResumableInsertResponseMetadata::Size(size),
+                metadata: ResumableInsertResponseMetadata::PartialSize(size),
             })
         } else {
             let (_parts, body) = response.into_parts();
