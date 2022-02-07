@@ -521,7 +521,12 @@ impl super::Object {
             percent_encoding::percent_encode(id.object().as_ref(), crate::util::QUERY_ENCODE_SET,),
         );
 
-        let req_builder = http::Request::builder().header(http::header::CONTENT_LENGTH, 0u64);
+        let req_builder = http::Request::builder()
+            .header(http::header::CONTENT_LENGTH, 0u64)
+            .header(
+                http::header::HeaderName::from_static("X-Upload-Content-Type"),
+                http::header::HeaderValue::from_static("application/octet-stream"),
+            ); // TODO: think about making it a param
 
         Ok(req_builder.method("POST").uri(uri).body(())?)
     }
