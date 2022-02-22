@@ -1,7 +1,6 @@
 use crate::error::{self, Error};
 use std::convert::TryFrom;
 
-
 pub trait ApiResponse<B>: Sized + TryFrom<http::Response<B>, Error = Error>
 where
     B: AsRef<[u8]>,
@@ -23,7 +22,7 @@ where
                     {
                         return Err(Error::Api(api_err));
                     }
-                } 
+                }
             }
             Err(Error::from(resp.status()))
         }

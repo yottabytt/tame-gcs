@@ -59,24 +59,6 @@ pub struct InsertResponse {
     pub metadata: super::Metadata,
 }
 
-// TODO: add doc comment
-pub struct InitResumableInsertResponse {
-    pub session_uri: String,
-}
-
-pub struct CancelResumableInsertResponse;
-
-// TODO: add doc comment
-pub enum ResumableInsertResponseMetadata {
-    PartialSize(u64),
-    Complete(Box<super::Metadata>),
-}
-
-// TODO: add doc comment
-pub struct ResumableInsertResponse {
-    pub metadata: ResumableInsertResponseMetadata,
-}
-
 impl ApiResponse<&[u8]> for InsertResponse {}
 impl ApiResponse<bytes::Bytes> for InsertResponse {}
 
@@ -91,6 +73,11 @@ where
         let metadata: super::Metadata = serde_json::from_slice(body.as_ref())?;
         Ok(Self { metadata })
     }
+}
+
+// TODO: add doc comment
+pub struct InitResumableInsertResponse {
+    pub session_uri: String,
 }
 
 impl ApiResponse<&[u8]> for InitResumableInsertResponse {}
@@ -116,35 +103,19 @@ where
     }
 }
 
-impl<B> ApiResponse<B> for CancelResumableInsertResponse
-where
-    B: AsRef<[u8]> + Sized + TryFrom<http::Response<B>, Error = Error>,
-{
-    fn try_from_parts(resp: http::response::Response<B>) -> Result<Self, Error> {
-        if resp.status() == StatusCode::from_u16(499).unwrap() {
-            Self::try_from(resp)
-        } else {
-            Err(Error::from(resp.status()))
-        }
-    }
+// TODO: add doc comment
+pub enum ResumableInsertResponseMetadata {
+    PartialSize(u64),
+    Complete(Box<super::Metadata>),
 }
 
-impl<B> TryFrom<http::Response<B>> for CancelResumableInsertResponse
-where
-    B: AsRef<[u8]>,
-{
-    type Error = Error;
-
-    fn try_from(_response: http::Response<B>) -> Result<Self, Self::Error> {
-        Ok(Self)
-    }
+// TODO: add doc comment
+pub struct ResumableInsertResponse {
+    pub metadata: ResumableInsertResponseMetadata,
 }
 
-impl<B> ApiResponse<B> for ResumableInsertResponse
-where
-    B: AsRef<[u8]> + Sized + TryFrom<http::Response<B>, Error = Error>,
-{
-    fn try_from_parts(resp: http::response::Response<B>) -> Result<Self, Error> {
+impl ResumableInsertResponse {
+    fn try_from_resp<B: AsRef<[u8]>>(resp: http::response::Response<B>) -> Result<Self, Error> {
         println!("heya! yeah i am in insert.rs");
         let status = resp.status();
         if status == StatusCode::from_u16(308).unwrap()
@@ -172,6 +143,51 @@ where
             }
             Err(Error::from(resp.status()))
         }
+    }
+}
+
+impl ApiResponse<&[u8]> for ResumableInsertResponse {
+    fn try_from_parts(resp: http::response::Response<&[u8]>) -> Result<Self, Error> {
+        Self::try_from_resp(resp)
+    }
+}
+impl ApiResponse<bytes::Bytes> for ResumableInsertResponse {
+    fn try_from_parts(resp: http::response::Response<bytes::Bytes>) -> Result<Self, Error> {
+        Self::try_from_resp(resp)
+    }
+}
+
+pub struct CancelResumableInsertResponse;
+
+impl CancelResumableInsertResponse {
+    fn try_from_resp<B: AsRef<[u8]>>(resp: http::response::Response<B>) -> Result<Self, Error> {
+        if resp.status() == StatusCode::from_u16(499).unwrap() {
+            Self::try_from(resp)
+        } else {
+            Err(Error::from(resp.status()))
+        }
+    }
+}
+
+impl ApiResponse<&[u8]> for CancelResumableInsertResponse {
+    fn try_from_parts(resp: http::response::Response<&[u8]>) -> Result<Self, Error> {
+        Self::try_from_resp(resp)
+    }
+}
+impl ApiResponse<bytes::Bytes> for CancelResumableInsertResponse {
+    fn try_from_parts(resp: http::response::Response<bytes::Bytes>) -> Result<Self, Error> {
+        Self::try_from_resp(resp)
+    }
+}
+
+impl<B> TryFrom<http::Response<B>> for CancelResumableInsertResponse
+where
+    B: AsRef<[u8]>,
+{
+    type Error = Error;
+
+    fn try_from(_response: http::Response<B>) -> Result<Self, Self::Error> {
+        Ok(Self)
     }
 }
 
