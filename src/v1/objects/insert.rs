@@ -1,6 +1,6 @@
 use crate::{
     common::{Conditionals, PredefinedAcl, Projection, StandardQueryParameters},
-    error::Error,
+    error::{ApiError, Error},
     response::ApiResponse,
     types::{BucketName, ObjectIdentifier, ObjectName},
 };
@@ -15,6 +15,7 @@ use http::StatusCode;
 use pin_utils::unsafe_pinned;
 #[cfg(feature = "async-multipart")]
 use std::pin::Pin;
+use std::str;
 use std::{convert::TryFrom, io};
 
 /// Optional parameters when inserting an object.
@@ -62,6 +63,8 @@ pub struct InsertResponse {
 pub struct InitResumableInsertResponse {
     pub session_uri: String,
 }
+
+pub struct CancelResumableInsertResponse;
 
 // TODO: add doc comment
 pub enum ResumableInsertResponseMetadata {
@@ -113,8 +116,64 @@ where
     }
 }
 
-impl ApiResponse<&[u8]> for ResumableInsertResponse {}
-impl ApiResponse<bytes::Bytes> for ResumableInsertResponse {}
+impl<B> ApiResponse<B> for CancelResumableInsertResponse
+where
+    B: AsRef<[u8]> + Sized + TryFrom<http::Response<B>, Error = Error>,
+{
+    fn try_from_parts(resp: http::response::Response<B>) -> Result<Self, Error> {
+        if resp.status() == StatusCode::from_u16(499).unwrap() {
+            Self::try_from(resp)
+        } else {
+            Err(Error::from(resp.status()))
+        }
+    }
+}
+
+impl<B> TryFrom<http::Response<B>> for CancelResumableInsertResponse
+where
+    B: AsRef<[u8]>,
+{
+    type Error = Error;
+
+    fn try_from(_response: http::Response<B>) -> Result<Self, Self::Error> {
+        Ok(Self)
+    }
+}
+
+impl<B> ApiResponse<B> for ResumableInsertResponse
+where
+    B: AsRef<[u8]> + Sized + TryFrom<http::Response<B>, Error = Error>,
+{
+    fn try_from_parts(resp: http::response::Response<B>) -> Result<Self, Error> {
+        println!("heya! yeah i am in insert.rs");
+        let status = resp.status();
+        if status == StatusCode::from_u16(308).unwrap()
+            || status == StatusCode::from_u16(200).unwrap()
+        {
+            Self::try_from(resp)
+        } else {
+            // If we get an error, but with a plain text payload, attempt to deserialize
+            // an ApiError from it, otherwise fallback to the simple HttpStatus
+            if let Some(ct) = resp
+                .headers()
+                .get(http::header::CONTENT_TYPE)
+                .and_then(|ct| ct.to_str().ok())
+            {
+                if ct.starts_with("text/plain") && !resp.body().as_ref().is_empty() {
+                    if let Ok(message) = str::from_utf8(resp.body().as_ref()) {
+                        let api_err = ApiError {
+                            code: status.into(),
+                            message: message.to_owned(),
+                            errors: vec![],
+                        };
+                        return Err(Error::Api(api_err));
+                    }
+                }
+            }
+            Err(Error::from(resp.status()))
+        }
+    }
+}
 
 impl<B> TryFrom<http::Response<B>> for ResumableInsertResponse
 where
@@ -511,7 +570,20 @@ impl super::Object {
         Ok(req_builder.method("POST").uri(uri).body(multipart)?)
     }
 
-    // TODO: add doc comment
+    /// Initiates a resumable upload session.
+    ///
+    /// * Accepted Media MIME types: `*/*`
+    ///
+    /// Note: A resumable upload must be completed within a week of being initiated.
+    ///
+    /// **CAUTION**: Be careful when sharing the resumable session URI, because it can be used by anyone to upload data to the target bucket without any further authentication.
+    ///  
+    /// Required IAM Permissions: `storage.objects.create`, `storage.objects.delete`
+    ///
+    /// Note: `storage.objects.delete` is only needed if an object with the same
+    /// name already exists.
+    ///
+    /// [Complete API Documentation](https://cloud.google.com/storage/docs/performing-resumable-uploads#initiate-session)
     pub fn init_resumable_insert<'a, OID>(
         id: &OID,
         content_type: Option<&str>,
@@ -538,7 +610,27 @@ impl super::Object {
         Ok(req_builder.method("POST").uri(uri).body(())?)
     }
 
-    // TODO: add doc comment
+    /// Cancels an incomplete resumable upload and prevent any further action for `session_uri`, which should have been obtained using [`init_resumable_insert`](#method.init_resumable_insert).
+    ///
+    /// [Complete API Documentation](https://cloud.google.com/storage/docs/performing-resumable-uploads#cancel-upload)
+    pub fn cancel_resumable_insert(session_uri: String) -> Result<http::Request<()>, Error> {
+        let req_builder = http::Request::builder().header(http::header::CONTENT_LENGTH, 0u64);
+
+        Ok(req_builder.method("DELETE").uri(session_uri).body(())?)
+    }
+
+    /// Performs resumable upload in the specified `session_uri`, which should have been obtained using [`init_resumable_insert`](#method.init_resumable_insert).
+    ///
+    /// * Maximum total object size: `5TB`
+    ///
+    /// There are two ways to upload the object's data:
+    /// * For single chunk upload, set `length` to the total size of the object.
+    /// * For multiple chunks upload, set `length` to the size of current chunk that is being uploaded and `Content-Range` header as `bytes CHUNK_FIRST_BYTE-CHUNK_LAST_BYTE/TOTAL_OBJECT_SIZE` where:
+    ///    * `CHUNK_FIRST_BYTE` is the starting byte in the overall object that the chunk you're uploading contains.
+    ///    * `CHUNK_LAST_BYTE` is the ending byte in the overall object that the chunk you're uploading contains.
+    ///    * `TOTAL_OBJECT_SIZE` is the total size of the object you are uploading.
+    ///
+    /// [Complete API Documentation](https://cloud.google.com/storage/docs/performing-resumable-uploads)
     pub fn resumable_insert<B>(
         session_uri: String,
         content: B,
