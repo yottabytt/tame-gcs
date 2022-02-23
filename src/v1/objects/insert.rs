@@ -133,10 +133,10 @@ impl ResumableInsertResponse {
                 println!("in content type check block");
                 if ct.starts_with("application/json") {
                     println!("in json block");
-                    if let Ok(api_err) = serde_json::from_slice::<ApiError>(resp.body().as_ref()) {
-                        println!("api err was serded");
-                        return Err(Error::Api(api_err));
-                    }
+                    let api_err = serde_json::from_slice::<ApiError>(resp.body().as_ref()).unwrap(); 
+                    println!("api err was serded");
+                    return Err(Error::Api(api_err));
+                    
                 } else if ct.starts_with("text/plain") && !resp.body().as_ref().is_empty() {
                     if let Ok(message) = str::from_utf8(resp.body().as_ref()) {
                         let api_err = ApiError {
