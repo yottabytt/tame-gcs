@@ -167,7 +167,6 @@ impl fmt::Display for ApiErrorOuter {
     }
 }
 
-
 #[cfg(feature = "signing")]
 impl From<ring::error::KeyRejected> for Error {
     fn from(re: ring::error::KeyRejected) -> Self {
