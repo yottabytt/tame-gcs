@@ -116,16 +116,27 @@ pub struct ResumableInsertResponse {
 
 impl ResumableInsertResponse {
     fn try_from_resp<B: AsRef<[u8]>>(resp: http::response::Response<B>) -> Result<Self, Error> {
-        println!("heya! yeah i am in insert.rs");
         let status = resp.status();
         if status == StatusCode::from_u16(308).unwrap()
             || status == StatusCode::from_u16(200).unwrap()
         {
             Self::try_from(resp)
         } else {
-            // If we get an error, but with a plain text payload, attempt to deserialize
+            // If we get an error, but with a JSON or plain text payload, attempt to deserialize
             // an ApiError from it, otherwise fallback to the simple HttpStatus
             if let Some(ct) = resp
+                .headers()
+                .get(http::header::CONTENT_TYPE)
+                .and_then(|ct| ct.to_str().ok())
+            {
+                if ct.starts_with("application/json") {
+                    if let Ok(api_err) =
+                        serde_json::from_slice::<ApiError>(resp.body().as_ref())
+                    {
+                        return Err(Error::Api(api_err));
+                    }
+                }
+            } else if let Some(ct) = resp
                 .headers()
                 .get(http::header::CONTENT_TYPE)
                 .and_then(|ct| ct.to_str().ok())
