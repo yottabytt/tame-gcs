@@ -1,6 +1,6 @@
 use crate::{
     common::{Conditionals, PredefinedAcl, Projection, StandardQueryParameters},
-    error::{ApiError, Error},
+    error::{self, Error},
     response::ApiResponse,
     types::{BucketName, ObjectIdentifier, ObjectName},
 };
@@ -133,13 +133,13 @@ impl ResumableInsertResponse {
                 println!("in content type check block");
                 if ct.starts_with("application/json") {
                     println!("in json block");
-                    let api_err = serde_json::from_slice::<ApiError>(resp.body().as_ref()).unwrap(); 
+                    let api_err = serde_json::from_slice::<error::ApiErrorOuter>(resp.body().as_ref()).unwrap(); 
                     println!("api err was serded");
-                    return Err(Error::Api(api_err));
+                    return Err(Error::Api(api_err.error));
                     
                 } else if ct.starts_with("text/plain") && !resp.body().as_ref().is_empty() {
                     if let Ok(message) = str::from_utf8(resp.body().as_ref()) {
-                        let api_err = ApiError {
+                        let api_err = error::ApiError {
                             code: status.into(),
                             message: message.to_owned(),
                             errors: vec![],

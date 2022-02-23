@@ -156,6 +156,18 @@ impl fmt::Display for ApiError {
     }
 }
 
+#[derive(Debug, thiserror::Error, PartialEq, Deserialize)]
+pub struct ApiErrorOuter {
+    pub error: ApiError,
+}
+
+impl fmt::Display for ApiErrorOuter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#?}", self)
+    }
+}
+
+
 #[cfg(feature = "signing")]
 impl From<ring::error::KeyRejected> for Error {
     fn from(re: ring::error::KeyRejected) -> Self {
