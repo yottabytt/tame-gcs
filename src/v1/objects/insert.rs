@@ -53,8 +53,8 @@ pub struct InsertObjectOptional<'a> {
     pub user_project: Option<&'a str>,
 }
 
-/// The response from an insert request is the Object [metadata](https://cloud.google.com/storage/docs/json_api/v1/objects#resource)
-/// for the newly inserted Object
+/// The response from an [`insert`](#method.insert) request is the object [metadata](https://cloud.google.com/storage/docs/json_api/v1/objects#resource)
+/// for the newly inserted object.
 pub struct InsertResponse {
     pub metadata: super::Metadata,
 }
@@ -75,7 +75,7 @@ where
     }
 }
 
-// TODO: add doc comment
+/// The response from an [`init_resumable_insert`](#method.init_resumable_insert) request is the `session_uri`.
 pub struct InitResumableInsertResponse {
     pub session_uri: String,
 }
@@ -103,13 +103,14 @@ where
     }
 }
 
-// TODO: add doc comment
 pub enum ResumableInsertResponseMetadata {
     PartialSize(u64),
     Complete(Box<super::Metadata>),
 }
 
-// TODO: add doc comment
+/// The response from an [`resumable_upload`](#method.resumable_upload) request is the enum [`ResumableInsertResponseMetadata`],
+/// which would be the size of the object uploaded so far,
+/// unless it's the request with last chunk that completes the upload wherein it would be the object [metadata](https://cloud.google.com/storage/docs/json_api/v1/objects#resource).
 pub struct ResumableInsertResponse {
     pub metadata: ResumableInsertResponseMetadata,
 }
@@ -117,28 +118,20 @@ pub struct ResumableInsertResponse {
 impl ResumableInsertResponse {
     fn try_from_resp<B: AsRef<[u8]>>(resp: http::response::Response<B>) -> Result<Self, Error> {
         let status = resp.status();
-        if status == StatusCode::from_u16(308).unwrap()
-            || status == StatusCode::from_u16(200).unwrap()
+        if status.eq(&http::StatusCode::PERMANENT_REDIRECT)
+            || status.eq(&http::StatusCode::OK)
+            || status.eq(&http::StatusCode::CREATED)
         {
             Self::try_from(resp)
         } else {
-            // If we get an error, but with a JSON or plain text payload, attempt to deserialize
+            // If we get an error, but with a plain text payload, attempt to deserialize
             // an ApiError from it, otherwise fallback to the simple HttpStatus
-            println!("in else block for resumable insert resp");
             if let Some(ct) = resp
                 .headers()
                 .get(http::header::CONTENT_TYPE)
                 .and_then(|ct| ct.to_str().ok())
             {
-                println!("in content type check block");
-                if ct.starts_with("application/json") {
-                    println!("in json block");
-                    let api_err =
-                        serde_json::from_slice::<error::ApiErrorOuter>(resp.body().as_ref())
-                            .unwrap();
-                    println!("api err was serded");
-                    return Err(Error::Api(api_err.error));
-                } else if ct.starts_with("text/plain") && !resp.body().as_ref().is_empty() {
+                if ct.starts_with("text/plain") && !resp.body().as_ref().is_empty() {
                     if let Ok(message) = str::from_utf8(resp.body().as_ref()) {
                         let api_err = error::ApiError {
                             code: status.into(),
@@ -159,6 +152,7 @@ impl ApiResponse<&[u8]> for ResumableInsertResponse {
         Self::try_from_resp(resp)
     }
 }
+
 impl ApiResponse<bytes::Bytes> for ResumableInsertResponse {
     fn try_from_parts(resp: http::response::Response<bytes::Bytes>) -> Result<Self, Error> {
         Self::try_from_resp(resp)
@@ -182,6 +176,7 @@ impl ApiResponse<&[u8]> for CancelResumableInsertResponse {
         Self::try_from_resp(resp)
     }
 }
+
 impl ApiResponse<bytes::Bytes> for CancelResumableInsertResponse {
     fn try_from_parts(resp: http::response::Response<bytes::Bytes>) -> Result<Self, Error> {
         Self::try_from_resp(resp)
@@ -643,7 +638,7 @@ impl super::Object {
         Ok(req_builder.method("DELETE").uri(session_uri).body(())?)
     }
 
-    /// Performs resumable upload in the specified `session_uri`, which should have been obtained using [`init_resumable_insert`](#method.init_resumable_insert).
+    /// Performs resumable upload to the specified `session_uri`, which should have been obtained using [`init_resumable_insert`](#method.init_resumable_insert).
     ///
     /// * Maximum total object size: `5TB`
     ///
@@ -654,7 +649,10 @@ impl super::Object {
     ///    * `CHUNK_LAST_BYTE` is the ending byte in the overall object that the chunk you're uploading contains.
     ///    * `TOTAL_OBJECT_SIZE` is the total size of the object you are uploading.
     ///
-    /// [Complete API Documentation](https://cloud.google.com/storage/docs/performing-resumable-uploads)
+    ///     **NOTE**: `length` should be a multiple of 256KiB, unless it's the last chunk. If not, the server will not accept all bytes sent in the request.
+    ///     Also, it is recommended to use at least 8MiB.
+    ///
+    /// [Complete API Documentation](https://cloud.google.com/storage/docs/performing-resumable-uploads#chunked-upload)
     pub fn resumable_insert<B>(
         session_uri: String,
         content: B,
