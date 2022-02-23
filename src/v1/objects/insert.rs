@@ -124,24 +124,17 @@ impl ResumableInsertResponse {
         } else {
             // If we get an error, but with a JSON or plain text payload, attempt to deserialize
             // an ApiError from it, otherwise fallback to the simple HttpStatus
+            println!("in else block for resumable insert resp");
             if let Some(ct) = resp
                 .headers()
                 .get(http::header::CONTENT_TYPE)
                 .and_then(|ct| ct.to_str().ok())
             {
                 if ct.starts_with("application/json") {
-                    if let Ok(api_err) =
-                        serde_json::from_slice::<ApiError>(resp.body().as_ref())
-                    {
+                    if let Ok(api_err) = serde_json::from_slice::<ApiError>(resp.body().as_ref()) {
                         return Err(Error::Api(api_err));
                     }
-                }
-            } else if let Some(ct) = resp
-                .headers()
-                .get(http::header::CONTENT_TYPE)
-                .and_then(|ct| ct.to_str().ok())
-            {
-                if ct.starts_with("text/plain") && !resp.body().as_ref().is_empty() {
+                } else if ct.starts_with("text/plain") && !resp.body().as_ref().is_empty() {
                     if let Ok(message) = str::from_utf8(resp.body().as_ref()) {
                         let api_err = ApiError {
                             code: status.into(),
