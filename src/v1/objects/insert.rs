@@ -130,7 +130,9 @@ impl ResumableInsertResponse {
                 .get(http::header::CONTENT_TYPE)
                 .and_then(|ct| ct.to_str().ok())
             {
+                println!("in content type check block");
                 if ct.starts_with("application/json") {
+                    println!("in json block");
                     if let Ok(api_err) = serde_json::from_slice::<ApiError>(resp.body().as_ref()) {
                         return Err(Error::Api(api_err));
                     }
