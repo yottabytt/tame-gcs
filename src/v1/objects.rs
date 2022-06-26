@@ -77,7 +77,7 @@ impl Default for Object {
 
 /// [Metadata](https://cloud.google.com/storage/docs/json_api/v1/objects#resource)
 /// associated with an Object.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
     /// The ID of the object, including the bucket name, object name, and generation number.
